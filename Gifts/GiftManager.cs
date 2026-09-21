@@ -54,6 +54,20 @@ public class GiftManager
 
         Load();
 
+        // No crear entidades aqui mismo: justo cuando dispara OnMapStart, el mundo del
+        // mapa todavia puede no estar completamente listo para crear entidades del lado
+        // nativo, y eso puede crashear el servidor entero (visto en produccion). Se da
+        // un margen antes de precachear/spawnear.
+        _plugin.AddTimer(1.5f, SpawnAllGifts);
+
+        _checkTimer?.Kill();
+        _checkTimer = _plugin.AddTimer(_config.CheckIntervalSeconds, CheckPlayers, TimerFlags.REPEAT);
+
+        IsLoaded = true;
+    }
+
+    private void SpawnAllGifts()
+    {
         if (!string.IsNullOrEmpty(_config.DefaultModel))
             Server.PrecacheModel(_config.DefaultModel);
 
@@ -65,11 +79,6 @@ public class GiftManager
 
         foreach (GiftPoint gift in _gifts)
             Spawn(gift);
-
-        _checkTimer?.Kill();
-        _checkTimer = _plugin.AddTimer(_config.CheckIntervalSeconds, CheckPlayers, TimerFlags.REPEAT);
-
-        IsLoaded = true;
     }
 
     public void OnMapEnd()
@@ -178,22 +187,38 @@ public class GiftManager
     {
         string model = string.IsNullOrEmpty(gift.Model) ? _config.DefaultModel : gift.Model;
 
-        CDynamicProp? prop = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic_override");
-        if (prop == null || !prop.IsValid)
+        if (string.IsNullOrEmpty(model))
         {
-            _plugin.Logger.LogError("[CS2StoreGifts] No se pudo crear la entidad para el regalo #{Id}", gift.Id);
+            _plugin.Logger.LogError("[CS2StoreGifts] El regalo #{Id} no tiene modelo (ni propio ni DefaultModel configurado); se omite.", gift.Id);
             return;
         }
 
-        prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
-        prop.DispatchSpawn();
-        prop.SetModel(model);
+        try
+        {
+            CDynamicProp? prop = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic_override");
+            if (prop == null || !prop.IsValid)
+            {
+                _plugin.Logger.LogError("[CS2StoreGifts] No se pudo crear la entidad para el regalo #{Id}", gift.Id);
+                return;
+            }
 
-        // Evita que el prop bloquee el movimiento de los jugadores.
-        prop.Collision.SolidType = SolidType_t.SOLID_NONE;
-        Utilities.SetStateChanged(prop, "CBaseModelEntity", "m_Collision", 0);
+            prop.SetModel(model);
+            prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
+            prop.DispatchSpawn();
 
-        _entities[gift.Id] = prop;
+            // Evita que el prop bloquee el movimiento de los jugadores.
+            prop.Collision.SolidType = SolidType_t.SOLID_NONE;
+            Utilities.SetStateChanged(prop, "CBaseModelEntity", "m_Collision", 0);
+
+            _entities[gift.Id] = prop;
+        }
+        catch (Exception ex)
+        {
+            // No todos los fallos aqui son excepciones de .NET atrapables (un modelo
+            // realmente invalido puede crashear el proceso a nivel nativo), pero esto
+            // cubre los casos que si se pueden atrapar sin tumbar el resto del plugin.
+            _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error creando la entidad del regalo #{Id} con modelo '{Model}'", gift.Id, model);
+        }
     }
 
     private void CheckPlayers()
