@@ -29,7 +29,10 @@ public class GiftsConfig : BasePluginConfig
     public float CheckIntervalSeconds { get; set; } = 0.25f;
 
     // Sonido reproducido al jugador que recoge el regalo.
-    public string PickupSound { get; set; } = "items/itempickup.vsnd";
+    // Vacio por defecto: reproducirlo implica una llamada nativa mas en el momento de
+    // la recogida, y no aporta nada imprescindible. Si lo rellenas, tiene que ser un
+    // sonido precacheado en el servidor (se comprueba con IsSoundPrecached antes de usarlo).
+    public string PickupSound { get; set; } = "";
 
     public bool AnnounceInChat { get; set; } = true;
 

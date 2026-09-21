@@ -399,6 +399,8 @@ public class GiftManager
             "[CS2StoreGifts] Collect #{Id}: {Player} recoge {Credits} creditos.",
             gift.Id, playerName, gift.Credits);
 
+        // Logs por paso: el crash ocurre en algun punto de esta secuencia y la linea
+        // anterior si llega al archivo, asi que la ultima que aparezca acota la llamada.
         try
         {
             _storeApi.GivePlayerCredits(player, gift.Credits);
@@ -408,16 +410,24 @@ public class GiftManager
             _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error dando {Credits} creditos a {Player}", gift.Credits, playerName);
         }
 
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: creditos entregados.", gift.Id);
+
         if (_entities.Remove(gift.Id, out CBaseModelEntity? prop))
             RemoveEntity(prop);
 
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: borrado de entidad encolado.", gift.Id);
+
         PlayPickupSound(player);
+
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: sonido procesado.", gift.Id);
 
         if (_config.AnnounceInChat)
         {
             Server.PrintToChatAll(
                 $" {ChatColors.Green}{_config.ChatPrefix}{ChatColors.Default} {playerName} encontro un regalo y gano {ChatColors.Gold}{gift.Credits}{ChatColors.Default} creditos!");
         }
+
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: completado.", gift.Id);
     }
 
     /// <summary>
@@ -435,8 +445,12 @@ public class GiftManager
         {
             try
             {
-                if (prop.IsValid)
-                    prop.Remove();
+                if (!prop.IsValid)
+                    return;
+
+                _plugin.Logger.LogInformation("[CS2StoreGifts] Destruyendo entidad de regalo...");
+                prop.Remove();
+                _plugin.Logger.LogInformation("[CS2StoreGifts] Entidad destruida.");
             }
             catch (Exception ex)
             {
