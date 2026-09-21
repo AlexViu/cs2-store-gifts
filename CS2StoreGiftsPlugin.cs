@@ -39,6 +39,16 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         // no tiene mapa cargado en ese momento y CS2 crashea con un error nativo
         // ("FATAL ERROR: PrecacheGeneric called with no server!") que ni siquiera es
         // una excepcion de .NET, no se puede atrapar con try/catch.
+        // Unico momento valido para registrar modelos en el resource manifest del mapa.
+        // Sin esto, SetModel() sobre el prop del regalo revienta una asercion nativa del
+        // motor ("resource requested but is not in the system / missing from a manifest")
+        // y mata el proceso del servidor entero.
+        RegisterListener<Listeners.OnServerPrecacheResources>(manifest =>
+        {
+            if (EnsureManager())
+                _manager!.OnServerPrecacheResources(manifest);
+        });
+
         RegisterListener<Listeners.OnMapStart>(_ => EnsureLoaded());
         RegisterListener<Listeners.OnMapEnd>(() => _manager?.OnMapEnd());
     }
@@ -142,9 +152,21 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         }
 
         string? model = command.ArgCount > 2 ? command.GetArg(2) : null;
-        GiftPoint gift = _manager!.AddGift(credits, origin, model);
 
-        command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
+        // Un modelo escrito a mano ahora no puede registrarse en el manifiesto de este
+        // mapa (ya se construyo al cargarlo), asi que la entidad no se creara todavia.
+        bool modelAvailable = _manager!.IsModelAvailable(model);
+
+        GiftPoint gift = _manager.AddGift(credits, origin, model);
+
+        if (modelAvailable)
+        {
+            command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
+            return;
+        }
+
+        command.ReplyToCommand($"Regalo #{gift.Id} guardado con {credits} creditos, pero el modelo no esta registrado en este mapa.");
+        command.ReplyToCommand("Aparecera al cambiar de mapa (si el modelo existe de verdad). No se crea ahora para no crashear el servidor.");
     }
 
     [ConsoleCommand("css_gift_remove", "Elimina el regalo mas cercano a tu posicion.")]

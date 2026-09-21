@@ -21,6 +21,13 @@ public class GiftManager
     private readonly List<GiftPoint> _gifts = [];
     private readonly Dictionary<int, CDynamicProp> _entities = [];
     private readonly HashSet<int> _collected = [];
+
+    // Modelos que SI conseguimos registrar en el resource manifest del mapa actual.
+    // Asignar con SetModel() un modelo que no este en el manifiesto revienta una
+    // asercion nativa del motor (skeletoninstance.cpp, SetupModel) y mata el proceso
+    // entero del servidor. No es una excepcion de .NET: no se puede atrapar desde C#.
+    private readonly HashSet<string> _manifestedModels = new(StringComparer.OrdinalIgnoreCase);
+
     private Timer? _checkTimer;
     private int _nextId = 1;
 
@@ -35,15 +42,77 @@ public class GiftManager
 
     public IReadOnlyList<GiftPoint> Gifts => _gifts;
 
-    // Solo es seguro llamar OnMapStart() (precachea modelos y crea entidades) cuando
-    // realmente hay un mapa/servidor activo. Llamarlo antes (ej. durante Load() del
-    // plugin, al arrancar el proceso) hace crashear el motor de CS2 por completo
-    // ("FATAL ERROR: PrecacheGeneric called with no server!"), no es un error de .NET
-    // que se pueda atrapar. Este flag evita volver a llamarlo sin necesidad y le permite
-    // al plugin saber si todavia falta cargar el mapa actual.
+    // Solo es seguro llamar OnMapStart() (crea entidades) cuando realmente hay un
+    // mapa/servidor activo. Llamarlo antes (ej. durante Load() del plugin, al arrancar
+    // el proceso) hace crashear el motor de CS2 por completo ("FATAL ERROR:
+    // PrecacheGeneric called with no server!"), no es un error de .NET que se pueda
+    // atrapar. Este flag evita volver a llamarlo sin necesidad y le permite al plugin
+    // saber si todavia falta cargar el mapa actual.
     public bool IsLoaded { get; private set; }
 
     private string CurrentMapFile => Path.Combine(_mapsDirectory, $"{Server.MapName}.json");
+
+    /// <summary>
+    /// Unico momento en que se pueden registrar modelos para el mapa que se esta cargando.
+    /// Server.PrecacheModel() llamado mas tarde (con el mapa ya activo) NO sirve: el
+    /// manifiesto ya esta construido y el modelo seguira "missing from manifest".
+    /// Se registran los modelos de TODOS los mapas guardados, no solo el actual, porque
+    /// en este punto no hay garantia de que Server.MapName ya apunte al mapa nuevo.
+    /// </summary>
+    public void OnServerPrecacheResources(ResourceManifest manifest)
+    {
+        _manifestedModels.Clear();
+
+        foreach (string model in CollectAllModels())
+        {
+            try
+            {
+                manifest.AddResource(model);
+                _manifestedModels.Add(model);
+            }
+            catch (Exception ex)
+            {
+                _plugin.Logger.LogError(ex, "[CS2StoreGifts] No se pudo registrar el modelo '{Model}' en el manifiesto", model);
+            }
+        }
+
+        _plugin.Logger.LogInformation("[CS2StoreGifts] {Count} modelo(s) registrados en el manifiesto del mapa.", _manifestedModels.Count);
+    }
+
+    /// <summary>
+    /// Todos los modelos que este plugin podria llegar a usar: el DefaultModel de la
+    /// config y los modelos propios de los regalos de todos los mapas guardados.
+    /// </summary>
+    private HashSet<string> CollectAllModels()
+    {
+        HashSet<string> models = new(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrEmpty(_config.DefaultModel))
+            models.Add(_config.DefaultModel);
+
+        foreach (string file in Directory.EnumerateFiles(_mapsDirectory, "*.json"))
+        {
+            foreach (GiftPoint gift in ReadGiftFile(file))
+            {
+                if (!string.IsNullOrEmpty(gift.Model))
+                    models.Add(gift.Model);
+            }
+        }
+
+        return models;
+    }
+
+    /// <summary>
+    /// Indica si un modelo se pudo registrar en el manifiesto de este mapa, es decir,
+    /// si es seguro asignarlo a una entidad. Un modelo escrito a mano en css_gift_add
+    /// con el mapa ya cargado NO lo estara: se guardara igual, pero no se puede spawnear
+    /// hasta el siguiente cambio de mapa.
+    /// </summary>
+    public bool IsModelAvailable(string? model)
+    {
+        string resolved = string.IsNullOrEmpty(model) ? _config.DefaultModel : model;
+        return !string.IsNullOrEmpty(resolved) && _manifestedModels.Contains(resolved);
+    }
 
     public void OnMapStart()
     {
@@ -68,15 +137,6 @@ public class GiftManager
 
     private void SpawnAllGifts()
     {
-        if (!string.IsNullOrEmpty(_config.DefaultModel))
-            Server.PrecacheModel(_config.DefaultModel);
-
-        foreach (GiftPoint gift in _gifts)
-        {
-            if (!string.IsNullOrEmpty(gift.Model))
-                Server.PrecacheModel(gift.Model);
-        }
-
         foreach (GiftPoint gift in _gifts)
             Spawn(gift);
     }
@@ -111,9 +171,8 @@ public class GiftManager
         _gifts.Add(gift);
         Save();
 
-        if (!string.IsNullOrEmpty(model))
-            Server.PrecacheModel(model);
-
+        // Si el modelo no esta en el manifiesto de este mapa, Spawn() lo omite en vez
+        // de crashear el servidor. El regalo queda guardado y aparecera al cambiar de mapa.
         Spawn(gift);
 
         return gift;
@@ -150,23 +209,28 @@ public class GiftManager
 
     private void Load()
     {
-        if (!File.Exists(CurrentMapFile))
+        List<GiftPoint> loaded = ReadGiftFile(CurrentMapFile);
+
+        if (loaded.Count == 0)
             return;
+
+        _gifts.AddRange(loaded);
+        _nextId = _gifts.Max(g => g.Id) + 1;
+    }
+
+    private List<GiftPoint> ReadGiftFile(string path)
+    {
+        if (!File.Exists(path))
+            return [];
 
         try
         {
-            string json = File.ReadAllText(CurrentMapFile);
-            List<GiftPoint>? loaded = JsonSerializer.Deserialize<List<GiftPoint>>(json);
-
-            if (loaded == null || loaded.Count == 0)
-                return;
-
-            _gifts.AddRange(loaded);
-            _nextId = _gifts.Max(g => g.Id) + 1;
+            return JsonSerializer.Deserialize<List<GiftPoint>>(File.ReadAllText(path)) ?? [];
         }
         catch (Exception ex)
         {
-            _plugin.Logger.LogError(ex, "[CS2StoreGifts] No se pudo leer {File}", CurrentMapFile);
+            _plugin.Logger.LogError(ex, "[CS2StoreGifts] No se pudo leer {File}", path);
+            return [];
         }
     }
 
@@ -190,6 +254,17 @@ public class GiftManager
         if (string.IsNullOrEmpty(model))
         {
             _plugin.Logger.LogError("[CS2StoreGifts] El regalo #{Id} no tiene modelo (ni propio ni DefaultModel configurado); se omite.", gift.Id);
+            return;
+        }
+
+        // Proteccion critica: asignar un modelo que no este en el resource manifest del
+        // mapa mata el proceso del servidor con una asercion nativa que no se puede
+        // atrapar desde C#. Mejor no crear la entidad.
+        if (!_manifestedModels.Contains(model))
+        {
+            _plugin.Logger.LogError(
+                "[CS2StoreGifts] El modelo '{Model}' del regalo #{Id} no esta registrado en el manifiesto de este mapa; no se crea la entidad (spawnearlo crashearia el servidor). Aparecera tras un cambio de mapa si el modelo existe.",
+                model, gift.Id);
             return;
         }
 

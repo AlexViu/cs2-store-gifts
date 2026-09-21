@@ -25,7 +25,9 @@ No modifica ni reemplaza cs2-store: es un plugin independiente que se conecta a 
    ```
    game/csgo/addons/counterstrikesharp/configs/plugins/CS2StoreGifts/CS2StoreGifts.json
    ```
-4. Abre ese `.json` y revisa `DefaultModel`: debe ser un modelo válido/precacheado en tu servidor (por ejemplo, una calabaza de un addon de Halloween). Los demás valores (radio de recogida, sonido, mensaje de chat, etc.) también se ajustan ahí.
+4. Abre ese `.json` y revisa `DefaultModel`: debe ser un modelo que **exista de verdad** en tu servidor (contenido base del juego o un addon montado en el mapa). Los demás valores (radio de recogida, sonido, mensaje de chat, etc.) también se ajustan ahí.
+
+> **Importante sobre los modelos:** CS2 exige que los modelos estén registrados en el *resource manifest* del mapa, y eso solo puede hacerse mientras el mapa se carga. Por eso el plugin registra sus modelos en el evento `OnServerPrecacheResources`. Consecuencia práctica: si colocas un regalo con un modelo nuevo usando `css_gift_add <creditos> <modelo>`, el regalo se guarda pero **no aparece hasta el siguiente cambio de mapa** (el plugin te lo avisa por chat). No es un fallo: asignar un modelo fuera del manifiesto mata el proceso del servidor con una aserción nativa del motor, así que el plugin lo evita a propósito.
 
 ### Darte permiso para usar los comandos
 
