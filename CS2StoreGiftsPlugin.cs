@@ -33,29 +33,52 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 
     public override void Load(bool hotReload)
     {
-        RegisterListener<Listeners.OnMapStart>(_ => _manager?.OnMapStart());
+        RegisterListener<Listeners.OnMapStart>(_ =>
+        {
+            bool existedBefore = _manager != null;
+
+            if (!EnsureManager())
+                return;
+
+            // Si EnsureManager acaba de crear el manager, ya cargo el mapa actual
+            // (ver EnsureManager). Solo hace falta recargar en cambios de mapa posteriores.
+            if (existedBefore)
+                _manager!.OnMapStart();
+        });
         RegisterListener<Listeners.OnMapEnd>(() => _manager?.OnMapEnd());
+
+        EnsureManager();
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)
     {
-        _storeApi = StoreCapability.Get();
-
-        if (_storeApi == null)
-        {
-            Logger.LogError("[CS2StoreGifts] No se encontro cs2-store (IStoreApi). Instala/activa cs2-store antes que CS2StoreGifts.");
-            return;
-        }
-
-        _manager = new GiftManager(this, Config, _storeApi);
-
-        if (hotReload)
-            _manager.OnMapStart();
+        EnsureManager();
     }
 
     public override void Unload(bool hotReload)
     {
         _manager?.OnMapEnd();
+    }
+
+    /// <summary>
+    /// Intenta conectar con cs2-store si todavia no lo hemos logrado. Se puede llamar
+    /// varias veces: cs2-store puede cargar despues que este plugin (orden de carga,
+    /// hot-reload, etc.), asi que no basta con intentarlo una sola vez en Load/OnAllPluginsLoaded.
+    /// </summary>
+    private bool EnsureManager()
+    {
+        if (_manager != null)
+            return true;
+
+        _storeApi ??= StoreCapability.Get();
+
+        if (_storeApi == null)
+            return false;
+
+        _manager = new GiftManager(this, Config, _storeApi);
+        _manager.OnMapStart();
+        Logger.LogInformation("[CS2StoreGifts] Conectado a cs2-store correctamente.");
+        return true;
     }
 
     [ConsoleCommand("css_gift_add", "Coloca un regalo de creditos en tu posicion actual. Uso: css_gift_add <creditos> [modelo]")]
@@ -65,7 +88,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         if (player == null || !player.IsValid || !HasAccess(player))
             return;
 
-        if (_manager == null)
+        if (!EnsureManager())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
@@ -85,7 +108,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         }
 
         string? model = command.ArgCount > 2 ? command.GetArg(2) : null;
-        GiftPoint gift = _manager.AddGift(credits, origin, model);
+        GiftPoint gift = _manager!.AddGift(credits, origin, model);
 
         command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
     }
@@ -94,8 +117,14 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     [CommandHelper(minArgs: 0, usage: "", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     public void OnGiftRemoveCommand(CCSPlayerController? player, CommandInfo command)
     {
-        if (player == null || !player.IsValid || !HasAccess(player) || _manager == null)
+        if (player == null || !player.IsValid || !HasAccess(player))
             return;
+
+        if (!EnsureManager())
+        {
+            command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
+            return;
+        }
 
         Vector? origin = player.PlayerPawn.Value?.AbsOrigin;
         if (origin == null)
@@ -104,7 +133,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        bool removed = _manager.RemoveNearest(origin, 150.0f);
+        bool removed = _manager!.RemoveNearest(origin, 150.0f);
         command.ReplyToCommand(removed ? "Regalo eliminado." : "No hay ningun regalo cerca (radio de 150 unidades).");
     }
 
@@ -114,13 +143,13 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         if (player != null && !HasAccess(player))
             return;
 
-        if (_manager == null)
+        if (!EnsureManager())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
         }
 
-        IReadOnlyList<GiftPoint> gifts = _manager.Gifts;
+        IReadOnlyList<GiftPoint> gifts = _manager!.Gifts;
         command.ReplyToCommand($"Regalos en este mapa: {gifts.Count}");
 
         foreach (GiftPoint gift in gifts)
@@ -135,13 +164,13 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         if (player != null && !HasAccess(player))
             return;
 
-        if (_manager == null)
+        if (!EnsureManager())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
         }
 
-        _manager.OnMapEnd();
+        _manager!.OnMapEnd();
         _manager.OnMapStart();
         command.ReplyToCommand("Regalos recargados.");
     }
