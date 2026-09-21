@@ -392,13 +392,39 @@ public class GiftManager
         if (_entities.Remove(gift.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
             prop.Remove();
 
-        if (!string.IsNullOrEmpty(_config.PickupSound))
-            player.ExecuteClientCommandFromServer($"play {_config.PickupSound}");
+        PlayPickupSound(player);
 
         if (_config.AnnounceInChat)
         {
             Server.PrintToChatAll(
                 $" {ChatColors.Green}{_config.ChatPrefix}{ChatColors.Default} {player.PlayerName} encontro un regalo y gano {ChatColors.Gold}{gift.Credits}{ChatColors.Default} creditos!");
+        }
+    }
+
+    /// <summary>
+    /// A diferencia de los modelos, los sonidos si se pueden validar antes de usarlos
+    /// (IsSoundPrecached), asi que se comprueba en vez de confiar en la ruta configurada.
+    /// </summary>
+    private void PlayPickupSound(CCSPlayerController player)
+    {
+        if (string.IsNullOrWhiteSpace(_config.PickupSound))
+            return;
+
+        try
+        {
+            if (!NativeAPI.IsSoundPrecached(_config.PickupSound))
+            {
+                _plugin.Logger.LogWarning(
+                    "[CS2StoreGifts] El sonido '{Sound}' no esta precacheado; no se reproduce. Deja PickupSound vacio para silenciarlo.",
+                    _config.PickupSound);
+                return;
+            }
+
+            player.ExecuteClientCommandFromServer($"play {_config.PickupSound}");
+        }
+        catch (Exception ex)
+        {
+            _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error reproduciendo el sonido '{Sound}'", _config.PickupSound);
         }
     }
 
