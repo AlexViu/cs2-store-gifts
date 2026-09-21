@@ -35,6 +35,14 @@ public class GiftManager
 
     public IReadOnlyList<GiftPoint> Gifts => _gifts;
 
+    // Solo es seguro llamar OnMapStart() (precachea modelos y crea entidades) cuando
+    // realmente hay un mapa/servidor activo. Llamarlo antes (ej. durante Load() del
+    // plugin, al arrancar el proceso) hace crashear el motor de CS2 por completo
+    // ("FATAL ERROR: PrecacheGeneric called with no server!"), no es un error de .NET
+    // que se pueda atrapar. Este flag evita volver a llamarlo sin necesidad y le permite
+    // al plugin saber si todavia falta cargar el mapa actual.
+    public bool IsLoaded { get; private set; }
+
     private string CurrentMapFile => Path.Combine(_mapsDirectory, $"{Server.MapName}.json");
 
     public void OnMapStart()
@@ -60,6 +68,8 @@ public class GiftManager
 
         _checkTimer?.Kill();
         _checkTimer = _plugin.AddTimer(_config.CheckIntervalSeconds, CheckPlayers, TimerFlags.REPEAT);
+
+        IsLoaded = true;
     }
 
     public void OnMapEnd()
@@ -74,6 +84,7 @@ public class GiftManager
         }
 
         _entities.Clear();
+        IsLoaded = false;
     }
 
     public GiftPoint AddGift(int credits, Vector position, string? model)

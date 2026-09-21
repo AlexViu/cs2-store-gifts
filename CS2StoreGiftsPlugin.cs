@@ -33,26 +33,26 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 
     public override void Load(bool hotReload)
     {
-        RegisterListener<Listeners.OnMapStart>(_ =>
-        {
-            bool existedBefore = _manager != null;
-
-            if (!EnsureManager())
-                return;
-
-            // Si EnsureManager acaba de crear el manager, ya cargo el mapa actual
-            // (ver EnsureManager). Solo hace falta recargar en cambios de mapa posteriores.
-            if (existedBefore)
-                _manager!.OnMapStart();
-        });
+        // OnMapStart es el UNICO lugar seguro para precachear modelos/crear entidades:
+        // ahi ya existe un mapa/servidor activo de verdad. Nunca llamar EnsureLoaded()
+        // desde Load()/OnAllPluginsLoaded() en un arranque en frio: el servidor todavia
+        // no tiene mapa cargado en ese momento y CS2 crashea con un error nativo
+        // ("FATAL ERROR: PrecacheGeneric called with no server!") que ni siquiera es
+        // una excepcion de .NET, no se puede atrapar con try/catch.
+        RegisterListener<Listeners.OnMapStart>(_ => EnsureLoaded());
         RegisterListener<Listeners.OnMapEnd>(() => _manager?.OnMapEnd());
-
-        EnsureManager();
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)
     {
+        // Solo resuelve la conexion con cs2-store (sin tocar mapas/entidades).
         EnsureManager();
+
+        // hotReload=true significa que el plugin se cargo con el servidor YA corriendo
+        // (ej. css_plugins load), es decir que ya hay un mapa activo de verdad: ahi si
+        // es seguro cargar los regalos de una vez en lugar de esperar al proximo cambio de mapa.
+        if (hotReload)
+            EnsureLoaded();
     }
 
     public override void Unload(bool hotReload)
@@ -61,9 +61,9 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     }
 
     /// <summary>
-    /// Intenta conectar con cs2-store si todavia no lo hemos logrado. Se puede llamar
-    /// varias veces: cs2-store puede cargar despues que este plugin (orden de carga,
-    /// hot-reload, etc.), asi que no basta con intentarlo una sola vez en Load/OnAllPluginsLoaded.
+    /// Resuelve la conexion con cs2-store (IStoreApi) si todavia no lo hemos logrado.
+    /// No toca mapas ni entidades: es seguro llamarlo en cualquier momento, incluso
+    /// antes de que haya un mapa cargado.
     /// </summary>
     private bool EnsureManager()
     {
@@ -78,19 +78,35 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
                 return false;
 
             _manager = new GiftManager(this, Config, _storeApi);
-            _manager.OnMapStart();
             Logger.LogInformation("[CS2StoreGifts] Conectado a cs2-store correctamente.");
             return true;
         }
         catch (Exception ex)
         {
             // Nunca dejar que un fallo aqui (ej. cs2-store todavia no registro su API,
-            // problema de orden de carga) tumbe el plugin entero. Se reintentara en la
-            // siguiente llamada (comando o cambio de mapa).
+            // problema de orden de carga, permisos de disco) tumbe el plugin entero.
+            // Se reintentara en la siguiente llamada (comando o cambio de mapa).
             Logger.LogWarning(ex, "[CS2StoreGifts] Todavia no se pudo conectar con cs2-store, se reintentara.");
             _storeApi = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Como EnsureManager(), pero ademas garantiza que los regalos del mapa actual esten
+    /// cargados (precache + entidades). SOLO llamar desde un contexto donde ya sabemos
+    /// que hay un mapa activo: el listener de OnMapStart, o un comando ejecutado por un
+    /// jugador conectado (si hay un jugador conectado, hay un mapa cargado).
+    /// </summary>
+    private bool EnsureLoaded()
+    {
+        if (!EnsureManager())
+            return false;
+
+        if (!_manager!.IsLoaded)
+            _manager.OnMapStart();
+
+        return true;
     }
 
     [ConsoleCommand("css_gift_add", "Coloca un regalo de creditos en tu posicion actual. Uso: css_gift_add <creditos> [modelo]")]
@@ -106,7 +122,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        if (!EnsureManager())
+        if (!EnsureLoaded())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
@@ -144,7 +160,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        if (!EnsureManager())
+        if (!EnsureLoaded())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
@@ -170,7 +186,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        if (!EnsureManager())
+        if (!EnsureLoaded())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
@@ -194,7 +210,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        if (!EnsureManager())
+        if (!EnsureLoaded())
         {
             command.ReplyToCommand("CS2StoreGifts no esta listo (cs2-store no cargado).");
             return;
