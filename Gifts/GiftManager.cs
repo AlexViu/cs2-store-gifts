@@ -22,6 +22,10 @@ public class GiftManager
     private readonly Dictionary<int, CBaseModelEntity> _entities = [];
     private readonly HashSet<int> _collected = [];
 
+    // Momento a partir del cual cada regalo se puede recoger. Se usa DateTime en vez de
+    // tiempo del motor para no depender de ninguna llamada nativa.
+    private readonly Dictionary<int, DateTime> _collectableAt = [];
+
     // Modelos que SI conseguimos registrar en el resource manifest del mapa actual.
     // Asignar con SetModel() un modelo que no este en el manifiesto revienta una
     // asercion nativa del motor (skeletoninstance.cpp, SetupModel) y mata el proceso
@@ -140,6 +144,7 @@ public class GiftManager
     {
         _entities.Clear();
         _collected.Clear();
+        _collectableAt.Clear();
         _gifts.Clear();
         _nextId = 1;
 
@@ -166,7 +171,10 @@ public class GiftManager
         _plugin.Logger.LogInformation("[CS2StoreGifts] SpawnAllGifts: creando {Count} regalo(s).", _gifts.Count);
 
         foreach (GiftPoint gift in _gifts)
+        {
+            MarkCollectableLater(gift);
             Spawn(gift);
+        }
 
         _plugin.Logger.LogInformation("[CS2StoreGifts] SpawnAllGifts: terminado ({Count} entidades vivas).", _entities.Count);
     }
@@ -204,6 +212,7 @@ public class GiftManager
 
         // Si el modelo no esta en el manifiesto de este mapa, Spawn() lo omite en vez
         // de crashear el servidor. El regalo queda guardado y aparecera al cambiar de mapa.
+        MarkCollectableLater(gift);
         Spawn(gift);
 
         return gift;
@@ -345,6 +354,31 @@ public class GiftManager
         }
     }
 
+    /// <summary>
+    /// Marca un regalo como no recogible durante los proximos PickupDelaySeconds.
+    /// Ademas de evitar que el admin lo recoja nada mas colocarlo, impide que la entidad
+    /// se cree y se destruya practicamente en el mismo frame.
+    /// </summary>
+    private void MarkCollectableLater(GiftPoint gift)
+    {
+        _collectableAt[gift.Id] = DateTime.UtcNow.AddSeconds(Math.Max(0, _config.PickupDelaySeconds));
+    }
+
+    private bool IsCollectable(GiftPoint gift)
+    {
+        return !_collectableAt.TryGetValue(gift.Id, out DateTime at) || DateTime.UtcNow >= at;
+    }
+
+    /// <summary>
+    /// Posicion a cierta distancia por delante de donde mira el jugador. Mismo calculo
+    /// que usa cs2-store para colocar el modelo de previsualizacion.
+    /// </summary>
+    public static Vector GetFrontPosition(Vector position, QAngle angles, float distance)
+    {
+        float radYaw = angles.Y * (MathF.PI / 180.0f);
+        return position + new Vector(MathF.Cos(radYaw), MathF.Sin(radYaw), 0) * distance;
+    }
+
     private void CheckPlayers()
     {
         if (_gifts.Count == 0)
@@ -355,7 +389,7 @@ public class GiftManager
 
         foreach (GiftPoint gift in _gifts)
         {
-            if (_collected.Contains(gift.Id))
+            if (_collected.Contains(gift.Id) || !IsCollectable(gift))
                 continue;
 
             foreach (CCSPlayerController player in players)

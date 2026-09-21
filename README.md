@@ -95,7 +95,7 @@ Guarda el archivo y vuelve a conectarte al servidor (o usa `css_admin_reload` si
 
   | Comando | Qué hace |
   |---|---|
-  | `css_gift_add <creditos> [modelo]` | Coloca un regalo en tu posición actual, con los créditos indicados. El modelo es opcional (si lo omites, usa `DefaultModel`). |
+  | `css_gift_add <creditos> [modelo]` | Coloca un regalo unos pasos por delante de ti (`PlaceDistance`), con los créditos indicados. El modelo es opcional (si lo omites, usa `DefaultModel`). No se puede recoger durante los primeros `PickupDelaySeconds`, para que no lo cojas tú al colocarlo. |
   | `css_gift_remove` | Elimina el regalo más cercano a tu posición (radio de 150 unidades). |
   | `css_gift_list` | Lista los regalos del mapa actual (ID, créditos y posición). |
   | `css_gift_reload` | Recarga los regalos del mapa desde el archivo JSON. |

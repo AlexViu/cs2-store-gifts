@@ -25,6 +25,14 @@ public class GiftsConfig : BasePluginConfig
     // Distancia (unidades de Source) para considerar que un jugador "toco" el regalo.
     public float PickupRadius { get; set; } = 60.0f;
 
+    // A que distancia por delante del admin se coloca el regalo con css_gift_add.
+    // Si se creara justo bajo sus pies, el propio admin lo recogeria al instante.
+    public float PlaceDistance { get; set; } = 100.0f;
+
+    // Margen antes de que un regalo recien creado se pueda recoger. Evita el ciclo de
+    // crear y destruir la entidad en el mismo instante, que es agresivo para el motor.
+    public float PickupDelaySeconds { get; set; } = 3.0f;
+
     // Cada cuantos segundos se revisa la distancia de los jugadores a los regalos.
     public float CheckIntervalSeconds { get; set; } = 0.25f;
 

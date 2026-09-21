@@ -15,7 +15,7 @@ namespace CS2StoreGifts;
 public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 {
     public override string ModuleName => "CS2StoreGifts";
-    public override string ModuleVersion => "1.3.0";
+    public override string ModuleVersion => "1.4.0";
     public override string ModuleAuthor => "Lonza";
     public override string ModuleDescription => "Regalos de creditos para cs2-store colocables en el mapa.";
 
@@ -155,12 +155,17 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        Vector? origin = player.PlayerPawn.Value?.AbsOrigin;
-        if (origin == null)
+        if (player.PlayerPawn is not { IsValid: true } pawnHandle ||
+            pawnHandle.Value is not { IsValid: true } pawn ||
+            pawn.AbsOrigin is not { } playerOrigin)
         {
             command.ReplyToCommand("No se pudo obtener tu posicion.");
             return;
         }
+
+        // El regalo se coloca unos pasos por delante, no bajo tus pies: si no, lo
+        // recogerias tu mismo en el instante en que lo creas.
+        Vector origin = GiftManager.GetFrontPosition(playerOrigin, pawn.EyeAngles, Config.PlaceDistance);
 
         string? model = command.ArgCount > 2 ? command.GetArg(2) : null;
 
@@ -182,7 +187,8 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             return;
         }
 
-        command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
+        command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos, {Config.PlaceDistance:F0} unidades por delante de ti.");
+        command.ReplyToCommand($"No se puede recoger hasta dentro de {Config.PickupDelaySeconds:F0}s.");
     }
 
     [ConsoleCommand("css_gift_remove", "Elimina el regalo mas cercano a tu posicion.")]
