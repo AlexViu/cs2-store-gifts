@@ -63,20 +63,24 @@ public class GiftManager
     {
         _manifestedModels.Clear();
 
-        foreach (string model in CollectAllModels())
+        HashSet<string> models = CollectAllModels();
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Manifiesto: {Count} modelo(s) candidatos a registrar.", models.Count);
+
+        foreach (string model in models)
         {
             try
             {
+                _plugin.Logger.LogInformation("[CS2StoreGifts] Manifiesto: registrando '{Model}'", model);
                 manifest.AddResource(model);
                 _manifestedModels.Add(model);
             }
             catch (Exception ex)
             {
-                _plugin.Logger.LogError(ex, "[CS2StoreGifts] No se pudo registrar el modelo '{Model}' en el manifiesto", model);
+                _plugin.Logger.LogError(ex, "[CS2StoreGifts] Manifiesto: fallo registrando '{Model}'", model);
             }
         }
 
-        _plugin.Logger.LogInformation("[CS2StoreGifts] {Count} modelo(s) registrados en el manifiesto del mapa.", _manifestedModels.Count);
+        _plugin.Logger.LogInformation("[CS2StoreGifts] Manifiesto: {Count} modelo(s) registrados correctamente.", _manifestedModels.Count);
     }
 
     /// <summary>
@@ -123,10 +127,14 @@ public class GiftManager
 
         Load();
 
+        _plugin.Logger.LogInformation(
+            "[CS2StoreGifts] OnMapStart en '{Map}': {Count} regalo(s) leidos, {Models} modelo(s) disponibles en el manifiesto.",
+            Server.MapName, _gifts.Count, _manifestedModels.Count);
+
         // No crear entidades aqui mismo: justo cuando dispara OnMapStart, el mundo del
         // mapa todavia puede no estar completamente listo para crear entidades del lado
         // nativo, y eso puede crashear el servidor entero (visto en produccion). Se da
-        // un margen antes de precachear/spawnear.
+        // un margen antes de spawnear.
         _plugin.AddTimer(1.5f, SpawnAllGifts);
 
         _checkTimer?.Kill();
@@ -137,8 +145,12 @@ public class GiftManager
 
     private void SpawnAllGifts()
     {
+        _plugin.Logger.LogInformation("[CS2StoreGifts] SpawnAllGifts: creando {Count} regalo(s).", _gifts.Count);
+
         foreach (GiftPoint gift in _gifts)
             Spawn(gift);
+
+        _plugin.Logger.LogInformation("[CS2StoreGifts] SpawnAllGifts: terminado ({Count} entidades vivas).", _entities.Count);
     }
 
     public void OnMapEnd()
@@ -170,6 +182,10 @@ public class GiftManager
 
         _gifts.Add(gift);
         Save();
+
+        _plugin.Logger.LogInformation(
+            "[CS2StoreGifts] AddGift #{Id}: {Credits} creditos, modelo '{Model}', guardado en {File}.",
+            gift.Id, credits, model ?? "(DefaultModel)", CurrentMapFile);
 
         // Si el modelo no esta en el manifiesto de este mapa, Spawn() lo omite en vez
         // de crashear el servidor. El regalo queda guardado y aparecera al cambiar de mapa.
@@ -270,22 +286,36 @@ public class GiftManager
 
         try
         {
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 1: CreateEntityByName (modelo '{Model}')", gift.Id, model);
+
             CDynamicProp? prop = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic_override");
             if (prop == null || !prop.IsValid)
             {
-                _plugin.Logger.LogError("[CS2StoreGifts] No se pudo crear la entidad para el regalo #{Id}", gift.Id);
+                _plugin.Logger.LogError("[CS2StoreGifts] Spawn #{Id}: CreateEntityByName devolvio una entidad nula o invalida", gift.Id);
                 return;
             }
 
-            prop.SetModel(model);
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 2: Teleport", gift.Id);
             prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
+
+            // DispatchSpawn ANTES de SetModel: una entidad recien creada sigue en la
+            // "staging list" del motor hasta que se spawnea, y asignarle el modelo en ese
+            // estado dispara la asercion nativa de skeletoninstance.cpp (SetupModel):
+            //   0 == (GetEntityIdentity()->GetFlags() & EF_IN_STAGING_LIST)
+            // que mata el proceso del servidor entero.
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 3: DispatchSpawn", gift.Id);
             prop.DispatchSpawn();
 
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 4: SetModel", gift.Id);
+            prop.SetModel(model);
+
             // Evita que el prop bloquee el movimiento de los jugadores.
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 5: colision", gift.Id);
             prop.Collision.SolidType = SolidType_t.SOLID_NONE;
             Utilities.SetStateChanged(prop, "CBaseModelEntity", "m_Collision", 0);
 
             _entities[gift.Id] = prop;
+            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id}: OK", gift.Id);
         }
         catch (Exception ex)
         {
@@ -332,6 +362,10 @@ public class GiftManager
     private void Collect(GiftPoint gift, CCSPlayerController player)
     {
         _collected.Add(gift.Id);
+
+        _plugin.Logger.LogInformation(
+            "[CS2StoreGifts] Collect #{Id}: {Player} recoge {Credits} creditos.",
+            gift.Id, player.PlayerName, gift.Credits);
 
         _storeApi.GivePlayerCredits(player, gift.Credits);
 
