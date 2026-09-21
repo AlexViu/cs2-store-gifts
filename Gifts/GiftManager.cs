@@ -361,16 +361,22 @@ public class GiftManager
 
             foreach (CCSPlayerController player in players)
             {
+                // El orden importa: hay que validar ANTES de desreferenciar. Leer un
+                // campo (AbsOrigin, SteamID...) de un pawn o controller ya liberado por
+                // el motor es un acceso a memoria invalida que mata el proceso, y no es
+                // una excepcion de .NET que se pueda atrapar.
                 if (!player.IsValid || player.IsBot || !player.PawnIsAlive)
                     continue;
 
-                CCSPlayerPawn? pawn = player.PlayerPawn.Value;
-                Vector? origin = pawn?.AbsOrigin;
-
-                if (pawn == null || !pawn.IsValid || origin == null)
+                if (player.PlayerPawn is not { IsValid: true } pawnHandle)
                     continue;
 
-                if (DistanceSquared(gift, origin) > radiusSq)
+                if (pawnHandle.Value is not { IsValid: true } pawn)
+                    continue;
+
+                Vector? origin = pawn.AbsOrigin;
+
+                if (origin == null || DistanceSquared(gift, origin) > radiusSq)
                     continue;
 
                 Collect(gift, player);
@@ -381,13 +387,27 @@ public class GiftManager
 
     private void Collect(GiftPoint gift, CCSPlayerController player)
     {
+        // Se marca como recogido lo primero: si algo falla mas abajo, el regalo no se
+        // vuelve a intentar en el siguiente tick del timer, en bucle.
         _collected.Add(gift.Id);
+
+        if (!player.IsValid)
+            return;
+
+        string playerName = player.PlayerName;
 
         _plugin.Logger.LogInformation(
             "[CS2StoreGifts] Collect #{Id}: {Player} recoge {Credits} creditos.",
-            gift.Id, player.PlayerName, gift.Credits);
+            gift.Id, playerName, gift.Credits);
 
-        _storeApi.GivePlayerCredits(player, gift.Credits);
+        try
+        {
+            _storeApi.GivePlayerCredits(player, gift.Credits);
+        }
+        catch (Exception ex)
+        {
+            _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error dando {Credits} creditos a {Player}", gift.Credits, playerName);
+        }
 
         if (_entities.Remove(gift.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
             prop.Remove();
@@ -397,7 +417,7 @@ public class GiftManager
         if (_config.AnnounceInChat)
         {
             Server.PrintToChatAll(
-                $" {ChatColors.Green}{_config.ChatPrefix}{ChatColors.Default} {player.PlayerName} encontro un regalo y gano {ChatColors.Gold}{gift.Credits}{ChatColors.Default} creditos!");
+                $" {ChatColors.Green}{_config.ChatPrefix}{ChatColors.Default} {playerName} encontro un regalo y gano {ChatColors.Gold}{gift.Credits}{ChatColors.Default} creditos!");
         }
     }
 
