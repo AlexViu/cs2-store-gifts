@@ -36,11 +36,11 @@ public class GiftsConfig : BasePluginConfig
     // Cada cuantos segundos se revisa la distancia de los jugadores a los regalos.
     public float CheckIntervalSeconds { get; set; } = 0.25f;
 
-    // Sonido reproducido al jugador que recoge el regalo.
-    // Vacio por defecto: reproducirlo implica una llamada nativa mas en el momento de
-    // la recogida, y no aporta nada imprescindible. Si lo rellenas, tiene que ser un
-    // sonido precacheado en el servidor (se comprueba con IsSoundPrecached antes de usarlo).
-    public string PickupSound { get; set; } = "";
+    // NOTA: no hay opcion de sonido a proposito. La implementacion anterior
+    // (ExecuteClientCommandFromServer("play <ruta>")) tumbaba el servidor al recoger un
+    // regalo. La API correcta es CBaseEntity.EmitSound, que espera un nombre de
+    // soundevent, no una ruta de archivo; si se vuelve a anadir, tiene que ser por ahi
+    // y verificado en un servidor de pruebas.
 
     public bool AnnounceInChat { get; set; } = true;
 

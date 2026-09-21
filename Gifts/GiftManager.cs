@@ -451,10 +451,6 @@ public class GiftManager
 
         _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: borrado de entidad encolado.", gift.Id);
 
-        PlayPickupSound(player);
-
-        _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: sonido procesado.", gift.Id);
-
         if (_config.AnnounceInChat)
         {
             Server.PrintToChatAll(
@@ -491,33 +487,6 @@ public class GiftManager
                 _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error destruyendo la entidad de un regalo");
             }
         });
-    }
-
-    /// <summary>
-    /// A diferencia de los modelos, los sonidos si se pueden validar antes de usarlos
-    /// (IsSoundPrecached), asi que se comprueba en vez de confiar en la ruta configurada.
-    /// </summary>
-    private void PlayPickupSound(CCSPlayerController player)
-    {
-        if (string.IsNullOrWhiteSpace(_config.PickupSound))
-            return;
-
-        try
-        {
-            if (!NativeAPI.IsSoundPrecached(_config.PickupSound))
-            {
-                _plugin.Logger.LogWarning(
-                    "[CS2StoreGifts] El sonido '{Sound}' no esta precacheado; no se reproduce. Deja PickupSound vacio para silenciarlo.",
-                    _config.PickupSound);
-                return;
-            }
-
-            player.ExecuteClientCommandFromServer($"play {_config.PickupSound}");
-        }
-        catch (Exception ex)
-        {
-            _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error reproduciendo el sonido '{Sound}'", _config.PickupSound);
-        }
     }
 
     private static float DistanceSquared(GiftPoint gift, Vector position)

@@ -25,7 +25,7 @@ No modifica ni reemplaza cs2-store: es un plugin independiente que se conecta a 
    ```
    game/csgo/addons/counterstrikesharp/configs/plugins/CS2StoreGifts/CS2StoreGifts.json
    ```
-4. Ajusta el `.json` (radio de recogida, sonido, mensaje de chat…). Por defecto **los regalos son invisibles**: se recogen igual, pero no se crea ninguna entidad. Para que se vean, lee la sección siguiente.
+4. Ajusta el `.json` (radio de recogida, distancia de colocación, mensaje de chat…). Por defecto **los regalos son invisibles**: se recogen igual, pero no se crea ninguna entidad. Para que se vean, lee la sección siguiente.
 
 ## Modelos: cómo activarlos sin tumbar el servidor
 
@@ -89,7 +89,8 @@ Guarda el archivo y vuelve a conectarte al servidor (o usa `css_admin_reload` si
 ## Cómo funciona
 
 - Al iniciar cada mapa, el plugin lee un archivo JSON propio de ese mapa (`configs/plugins/CS2StoreGifts/maps/<nombre_del_mapa>.json`) y crea una entidad visual en cada posición guardada, sin colisión con los jugadores.
-- Cada cierto tiempo revisa la distancia entre cada jugador vivo y cada regalo no recogido. Si un jugador entra en el radio configurado, recibe los créditos a través de `IStoreApi.GivePlayerCredits()`, se reproduce un sonido, se anuncia en el chat (si está activado) y el regalo desaparece.
+- Cada cierto tiempo revisa la distancia entre cada jugador vivo y cada regalo no recogido. Si un jugador entra en el radio configurado, recibe los créditos a través de `IStoreApi.GivePlayerCredits()`, se anuncia en el chat (si está activado) y el regalo desaparece.
+- No hay sonido de recogida a propósito: la implementación anterior (`ExecuteClientCommandFromServer("play <ruta>")`) tumbaba el servidor. La API correcta es `CBaseEntity.EmitSound`, que espera un nombre de *soundevent* y no una ruta de archivo.
 - Cada regalo se puede recoger **una sola vez por mapa**: vuelve a estar disponible cuando el mapa se reinicia o cambia.
 - Los regalos se crean y gestionan en vivo, dentro del juego, con comandos de administrador (requieren el permiso `@css/root`):
 
