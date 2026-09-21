@@ -12,4 +12,26 @@
 		<PackageReference Include="CounterStrikeSharp.API" Version="1.0.374" />
 	</ItemGroup>
 
+	<!--
+		StoreApi/ es un proyecto separado (no un simple archivo de codigo) a proposito.
+		cs2-store expone su API tipada (IStoreApi) mediante un ensamblado StoreApi.dll
+		compartido: si aqui compilaramos IStoreApi.cs directamente dentro de
+		CS2StoreGifts.dll, CLR lo veria como un tipo distinto al de cs2-store (aunque
+		el codigo fuente sea identico) y la busqueda de la capacidad "cs2-store:api"
+		fallaria siempre con KeyNotFoundException. Por eso se compila como proyecto
+		aparte y se referencia con Private=false: en tiempo de ejecucion se resuelve
+		contra el StoreApi.dll que cs2-store ya deja en addons/counterstrikesharp/shared/StoreApi/,
+		garantizando que ambos plugins usen el mismo tipo IStoreApi.
+	-->
+	<ItemGroup>
+		<Compile Remove="StoreApi/**/*.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="StoreApi\StoreApi.csproj">
+			<Private>false</Private>
+			<IncludeAssets>compile</IncludeAssets>
+		</ProjectReference>
+	</ItemGroup>
+
 </Project>

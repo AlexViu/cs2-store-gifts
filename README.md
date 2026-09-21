@@ -8,11 +8,16 @@ No modifica ni reemplaza cs2-store: es un plugin independiente que se conecta a 
 
 - Un servidor de CS2 con [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp) instalado.
 - [cs2-store](https://github.com/schwarper/cs2-store) instalado y cargando **antes** que este plugin.
+- El archivo `StoreApi.dll` de cs2-store presente en:
+  ```
+  game/csgo/addons/counterstrikesharp/shared/StoreApi/StoreApi.dll
+  ```
+  cs2-store lo deja ahí solo si instalaste su build/release oficial (no si solo copiaste el `.dll` de `Store`). Sin este archivo, CS2StoreGifts nunca podrá conectarse a la API de cs2-store, aunque cs2-store este cargado y funcionando.
 
 ## Cómo agregarlo al servidor
 
 1. Compila el proyecto (`dotnet build -c Release`) o descarga el `.dll` ya compilado.
-2. Copia `CS2StoreGifts.dll` a:
+2. Copia `CS2StoreGifts.dll` (no `StoreApi.dll`, ese ya lo trae cs2-store) a:
    ```
    game/csgo/addons/counterstrikesharp/plugins/CS2StoreGifts/CS2StoreGifts.dll
    ```
