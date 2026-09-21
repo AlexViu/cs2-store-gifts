@@ -159,8 +159,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         if (model != null && !_manager!.IsModelAllowed(model))
         {
             command.ReplyToCommand($"Modelo no autorizado: '{model}'.");
-            command.ReplyToCommand("Anadelo a AllowedModels en CS2StoreGifts.json (solo si sabes que es un prop valido) y reinicia el mapa.");
-            command.ReplyToCommand("Los modelos de agente/jugador (agents/...) no sirven como regalo: crashean el servidor.");
+            command.ReplyToCommand("Anadelo a AllowedModels en CS2StoreGifts.json y reinicia el mapa para registrarlo en el manifiesto.");
             return;
         }
 

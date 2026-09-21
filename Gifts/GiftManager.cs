@@ -19,7 +19,7 @@ public class GiftManager
     private readonly string _mapsDirectory;
 
     private readonly List<GiftPoint> _gifts = [];
-    private readonly Dictionary<int, CDynamicProp> _entities = [];
+    private readonly Dictionary<int, CBaseModelEntity> _entities = [];
     private readonly HashSet<int> _collected = [];
 
     // Modelos que SI conseguimos registrar en el resource manifest del mapa actual.
@@ -116,14 +116,6 @@ public class GiftManager
         if (string.IsNullOrWhiteSpace(model))
             return false;
 
-        // Los modelos de agente/jugador llevan esqueleto y animgraph propios; montarlos
-        // sobre un prop dispara la asercion de SetupModel aunque el modelo exista.
-        if (model.StartsWith("agents/", StringComparison.OrdinalIgnoreCase) ||
-            model.StartsWith("characters/", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         return model.Equals(_config.DefaultModel, StringComparison.OrdinalIgnoreCase)
             || _config.AllowedModels.Contains(model, StringComparer.OrdinalIgnoreCase);
     }
@@ -184,7 +176,7 @@ public class GiftManager
         _checkTimer?.Kill();
         _checkTimer = null;
 
-        foreach (CDynamicProp prop in _entities.Values)
+        foreach (CBaseModelEntity prop in _entities.Values)
         {
             if (prop.IsValid)
                 prop.Remove();
@@ -242,7 +234,7 @@ public class GiftManager
         _gifts.Remove(nearest);
         _collected.Remove(nearest.Id);
 
-        if (_entities.Remove(nearest.Id, out CDynamicProp? prop) && prop.IsValid)
+        if (_entities.Remove(nearest.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
             prop.Remove();
 
         Save();
@@ -313,25 +305,35 @@ public class GiftManager
 
         try
         {
-            CDynamicProp? prop = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic_override");
+            // Secuencia copiada de cs2-store (Item_PlayerSkin.Inspect), que hace justo
+            // esto mismo para previsualizar modelos y funciona en produccion.
+            CBaseModelEntity? prop = Utilities.CreateEntityByName<CBaseModelEntity>("prop_dynamic");
             if (prop == null || !prop.IsValid)
             {
                 _plugin.Logger.LogError("[CS2StoreGifts] Regalo #{Id}: CreateEntityByName devolvio una entidad nula o invalida", gift.Id);
                 return;
             }
 
-            prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
+            prop.Spawnflags = 256u;
 
-            // DispatchSpawn ANTES de SetModel: una entidad recien creada sigue en la
-            // "staging list" del motor hasta que se spawnea, y asignarle el modelo en ese
-            // estado dispara la asercion de skeletoninstance.cpp (SetupModel):
-            //   0 == (GetEntityIdentity()->GetFlags() & EF_IN_STAGING_LIST)
-            prop.DispatchSpawn();
-            prop.SetModel(model);
-
-            // Evita que el prop bloquee el movimiento de los jugadores.
+            // Sin colision para que los jugadores puedan atravesar el regalo al recogerlo.
+            // Se configura antes de spawnear, que es cuando el motor lee estos valores.
             prop.Collision.SolidType = SolidType_t.SOLID_NONE;
-            Utilities.SetStateChanged(prop, "CBaseModelEntity", "m_Collision", 0);
+
+            prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
+            prop.DispatchSpawn();
+
+            // SetModel TIENE que ir en el frame siguiente. Tras DispatchSpawn la entidad
+            // sigue en la "staging list" del motor durante el resto del frame actual, y
+            // asignarle el modelo en ese estado dispara la asercion de
+            // skeletoninstance.cpp (SetupModel):
+            //   0 == (GetEntityIdentity()->GetFlags() & EF_IN_STAGING_LIST)
+            // que mata el proceso del servidor entero. Hacerlo un frame despues es seguro.
+            Server.NextFrame(() =>
+            {
+                if (prop.IsValid)
+                    prop.SetModel(model);
+            });
 
             _entities[gift.Id] = prop;
         }
@@ -387,7 +389,7 @@ public class GiftManager
 
         _storeApi.GivePlayerCredits(player, gift.Credits);
 
-        if (_entities.Remove(gift.Id, out CDynamicProp? prop) && prop.IsValid)
+        if (_entities.Remove(gift.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
             prop.Remove();
 
         if (!string.IsNullOrEmpty(_config.PickupSound))

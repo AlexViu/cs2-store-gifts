@@ -47,9 +47,27 @@ Por eso el plugin usa una lista blanca en vez de aceptar cualquier ruta:
 - Con `DefaultModel` vacío los regalos funcionan pero son invisibles. Es el modo seguro por defecto.
 - Para usar un modelo, ponlo en `DefaultModel` y/o en `AllowedModels`, y **reinicia el mapa** para que se registre en el manifiesto.
 - `css_gift_add <creditos> <modelo>` solo acepta modelos de esa lista. Cualquier otra ruta se rechaza con un mensaje, sin llegar a tocar el motor.
-- Los modelos de agente/jugador (`agents/...`, `characters/...`) se rechazan siempre: llevan esqueleto y animgraph propios y revientan al montarlos sobre un prop, aunque el modelo exista y lo use otro plugin.
 
-Verifica cada modelo nuevo en un servidor de pruebas, nunca en producción.
+Sirve cualquier modelo que exista y esté montado en el mapa, incluidos los de agente (`agents/...`) que uses como skins en cs2-store. Verifica cada modelo nuevo en un servidor de pruebas, nunca en producción.
+
+### Por qué el orden de creación importa
+
+La entidad del regalo se crea con la misma secuencia que usa cs2-store para previsualizar skins, y **el orden no es negociable**:
+
+```csharp
+prop.Spawnflags = 256u;
+prop.Collision.SolidType = SolidType_t.SOLID_NONE;  // antes de spawnear
+prop.Teleport(...);
+prop.DispatchSpawn();
+
+Server.NextFrame(() =>                               // SetModel va un frame despues
+{
+    if (prop.IsValid)
+        prop.SetModel(model);
+});
+```
+
+Tras `DispatchSpawn()` la entidad sigue en la *staging list* del motor durante el resto del frame. Llamar a `SetModel()` en ese mismo frame dispara la aserción `0 == (flags & EF_IN_STAGING_LIST)` en `skeletoninstance.cpp` y **mata el proceso del servidor entero** — no es una excepción de .NET y no se puede capturar.
 
 ### Darte permiso para usar los comandos
 
