@@ -177,10 +177,7 @@ public class GiftManager
         _checkTimer = null;
 
         foreach (CBaseModelEntity prop in _entities.Values)
-        {
-            if (prop.IsValid)
-                prop.Remove();
-        }
+            RemoveEntity(prop);
 
         _entities.Clear();
         IsLoaded = false;
@@ -234,8 +231,8 @@ public class GiftManager
         _gifts.Remove(nearest);
         _collected.Remove(nearest.Id);
 
-        if (_entities.Remove(nearest.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
-            prop.Remove();
+        if (_entities.Remove(nearest.Id, out CBaseModelEntity? prop))
+            RemoveEntity(prop);
 
         Save();
         return true;
@@ -316,9 +313,11 @@ public class GiftManager
 
             prop.Spawnflags = 256u;
 
-            // Sin colision para que los jugadores puedan atravesar el regalo al recogerlo.
-            // Se configura antes de spawnear, que es cuando el motor lee estos valores.
-            prop.Collision.SolidType = SolidType_t.SOLID_NONE;
+            // SOLID_VPHYSICS, igual que cs2-store. Antes se forzaba SOLID_NONE para que
+            // los jugadores atravesaran el regalo, pero spawnear sin objeto de fisica
+            // deja la entidad a medio inicializar y destruirla despues puede tumbar el
+            // servidor. El regalo se recoge igual por proximidad al acercarse.
+            prop.Collision.SolidType = SolidType_t.SOLID_VPHYSICS;
 
             prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
             prop.DispatchSpawn();
@@ -409,8 +408,8 @@ public class GiftManager
             _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error dando {Credits} creditos a {Player}", gift.Credits, playerName);
         }
 
-        if (_entities.Remove(gift.Id, out CBaseModelEntity? prop) && prop is { IsValid: true })
-            prop.Remove();
+        if (_entities.Remove(gift.Id, out CBaseModelEntity? prop))
+            RemoveEntity(prop);
 
         PlayPickupSound(player);
 
@@ -419,6 +418,31 @@ public class GiftManager
             Server.PrintToChatAll(
                 $" {ChatColors.Green}{_config.ChatPrefix}{ChatColors.Default} {playerName} encontro un regalo y gano {ChatColors.Gold}{gift.Credits}{ChatColors.Default} creditos!");
         }
+    }
+
+    /// <summary>
+    /// Destruye la entidad de un regalo en el frame siguiente. Se difiere por el mismo
+    /// motivo que SetModel: las operaciones de ciclo de vida de entidades hechas en
+    /// mitad del frame (aqui, desde el callback de un timer) pueden dejar al motor en
+    /// un estado inconsistente y tumbar el proceso.
+    /// </summary>
+    private void RemoveEntity(CBaseModelEntity? prop)
+    {
+        if (prop == null)
+            return;
+
+        Server.NextFrame(() =>
+        {
+            try
+            {
+                if (prop.IsValid)
+                    prop.Remove();
+            }
+            catch (Exception ex)
+            {
+                _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error destruyendo la entidad de un regalo");
+            }
+        });
     }
 
     /// <summary>
