@@ -16,7 +16,7 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 {
     public override string ModuleName => "CS2StoreGifts";
     public override string ModuleVersion => "1.0.0";
-    public override string ModuleAuthor => "halloweencs2";
+    public override string ModuleAuthor => "Lonza";
     public override string ModuleDescription => "Regalos de creditos para cs2-store colocables en el mapa.";
 
     public GiftsConfig Config { get; set; } = new();
@@ -70,15 +70,27 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
         if (_manager != null)
             return true;
 
-        _storeApi ??= StoreCapability.Get();
+        try
+        {
+            _storeApi ??= StoreCapability.Get();
 
-        if (_storeApi == null)
+            if (_storeApi == null)
+                return false;
+
+            _manager = new GiftManager(this, Config, _storeApi);
+            _manager.OnMapStart();
+            Logger.LogInformation("[CS2StoreGifts] Conectado a cs2-store correctamente.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Nunca dejar que un fallo aqui (ej. cs2-store todavia no registro su API,
+            // problema de orden de carga) tumbe el plugin entero. Se reintentara en la
+            // siguiente llamada (comando o cambio de mapa).
+            Logger.LogWarning(ex, "[CS2StoreGifts] Todavia no se pudo conectar con cs2-store, se reintentara.");
+            _storeApi = null;
             return false;
-
-        _manager = new GiftManager(this, Config, _storeApi);
-        _manager.OnMapStart();
-        Logger.LogInformation("[CS2StoreGifts] Conectado a cs2-store correctamente.");
-        return true;
+        }
     }
 
     [ConsoleCommand("css_gift_add", "Coloca un regalo de creditos en tu posicion actual. Uso: css_gift_add <creditos> [modelo]")]
