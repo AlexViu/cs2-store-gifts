@@ -85,8 +85,14 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     [CommandHelper(minArgs: 1, usage: "<creditos> [modelo]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     public void OnGiftAddCommand(CCSPlayerController? player, CommandInfo command)
     {
-        if (player == null || !player.IsValid || !HasAccess(player))
+        if (player == null || !player.IsValid)
             return;
+
+        if (!HasAccess(player))
+        {
+            command.ReplyToCommand("No tienes permiso para usar este comando (requiere @css/root).");
+            return;
+        }
 
         if (!EnsureManager())
         {
@@ -117,8 +123,14 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     [CommandHelper(minArgs: 0, usage: "", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     public void OnGiftRemoveCommand(CCSPlayerController? player, CommandInfo command)
     {
-        if (player == null || !player.IsValid || !HasAccess(player))
+        if (player == null || !player.IsValid)
             return;
+
+        if (!HasAccess(player))
+        {
+            command.ReplyToCommand("No tienes permiso para usar este comando (requiere @css/root).");
+            return;
+        }
 
         if (!EnsureManager())
         {
@@ -141,7 +153,10 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     public void OnGiftListCommand(CCSPlayerController? player, CommandInfo command)
     {
         if (player != null && !HasAccess(player))
+        {
+            command.ReplyToCommand("No tienes permiso para usar este comando (requiere @css/root).");
             return;
+        }
 
         if (!EnsureManager())
         {
@@ -162,7 +177,10 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
     public void OnGiftReloadCommand(CCSPlayerController? player, CommandInfo command)
     {
         if (player != null && !HasAccess(player))
+        {
+            command.ReplyToCommand("No tienes permiso para usar este comando (requiere @css/root).");
             return;
+        }
 
         if (!EnsureManager())
         {

@@ -22,6 +22,23 @@ No modifica ni reemplaza cs2-store: es un plugin independiente que se conecta a 
    ```
 4. Abre ese `.json` y revisa `DefaultModel`: debe ser un modelo válido/precacheado en tu servidor (por ejemplo, una calabaza de un addon de Halloween). Los demás valores (radio de recogida, sonido, mensaje de chat, etc.) también se ajustan ahí.
 
+### Darte permiso para usar los comandos
+
+Los comandos de administración requieren el permiso `@css/root` de CounterStrikeSharp. Si no lo tienes, el comando simplemente no responde (no da ningún mensaje de error).
+
+Edita `game/csgo/addons/counterstrikesharp/configs/admins.json` y agrégate con tu SteamID64, por ejemplo:
+
+```json
+{
+  "TuNombre": {
+    "identity": "STEAM_1:0:XXXXXXXX",
+    "flags": ["@css/root"]
+  }
+}
+```
+
+Guarda el archivo y vuelve a conectarte al servidor (o usa `css_admin_reload` si tu instalación de CounterStrikeSharp lo soporta) para que tome el cambio.
+
 ## Cómo funciona
 
 - Al iniciar cada mapa, el plugin lee un archivo JSON propio de ese mapa (`configs/plugins/CS2StoreGifts/maps/<nombre_del_mapa>.json`) y crea una entidad visual en cada posición guardada, sin colisión con los jugadores.
