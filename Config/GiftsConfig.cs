@@ -7,8 +7,20 @@ public class GiftsConfig : BasePluginConfig
     public override int Version { get; set; } = 1;
 
     // Modelo usado cuando un regalo no define el suyo propio.
-    // Cambialo por un modelo que exista/este precacheado en tu servidor (por ejemplo, un pumpkin de un addon de Halloween).
-    public string DefaultModel { get; set; } = "models/props_survival/cash/cash_bag.vmdl";
+    //
+    // VACIO POR DEFECTO A PROPOSITO: asignar un modelo que no existe o que no es valido
+    // para un prop mata el proceso del servidor entero con una asercion nativa del motor,
+    // y CounterStrikeSharp no ofrece ninguna forma de comprobar si un modelo es valido
+    // antes de usarlo. Con el valor vacio los regalos funcionan igual (se recogen por
+    // proximidad) pero no se crea ninguna entidad visible: es el modo que no puede
+    // crashear. Pon aqui un modelo solo cuando hayas verificado que funciona.
+    public string DefaultModel { get; set; } = "";
+
+    // Unicos modelos que se aceptan en css_gift_add (ademas de DefaultModel).
+    // Cualquier otra ruta se rechaza sin llegar a tocar el motor. Estos modelos se
+    // registran en el resource manifest de cada mapa, asi que se pueden usar de
+    // inmediato sin esperar a un cambio de mapa.
+    public List<string> AllowedModels { get; set; } = [];
 
     // Distancia (unidades de Source) para considerar que un jugador "toco" el regalo.
     public float PickupRadius { get; set; } = 60.0f;

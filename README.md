@@ -25,9 +25,31 @@ No modifica ni reemplaza cs2-store: es un plugin independiente que se conecta a 
    ```
    game/csgo/addons/counterstrikesharp/configs/plugins/CS2StoreGifts/CS2StoreGifts.json
    ```
-4. Abre ese `.json` y revisa `DefaultModel`: debe ser un modelo que **exista de verdad** en tu servidor (contenido base del juego o un addon montado en el mapa). Los demás valores (radio de recogida, sonido, mensaje de chat, etc.) también se ajustan ahí.
+4. Ajusta el `.json` (radio de recogida, sonido, mensaje de chat…). Por defecto **los regalos son invisibles**: se recogen igual, pero no se crea ninguna entidad. Para que se vean, lee la sección siguiente.
 
-> **Importante sobre los modelos:** CS2 exige que los modelos estén registrados en el *resource manifest* del mapa, y eso solo puede hacerse mientras el mapa se carga. Por eso el plugin registra sus modelos en el evento `OnServerPrecacheResources`. Consecuencia práctica: si colocas un regalo con un modelo nuevo usando `css_gift_add <creditos> <modelo>`, el regalo se guarda pero **no aparece hasta el siguiente cambio de mapa** (el plugin te lo avisa por chat). No es un fallo: asignar un modelo fuera del manifiesto mata el proceso del servidor con una aserción nativa del motor, así que el plugin lo evita a propósito.
+## Modelos: cómo activarlos sin tumbar el servidor
+
+Esta es la parte delicada del plugin y conviene entenderla:
+
+- CS2 exige que un modelo esté registrado en el *resource manifest* del mapa antes de asignarlo a una entidad. Ese registro solo puede hacerse mientras el mapa carga (el plugin lo hace en `OnServerPrecacheResources`).
+- Si se asigna un modelo que no existe, no está registrado, o no es un prop válido, el motor **mata el proceso del servidor entero** con una aserción nativa de C++. No es una excepción de .NET: no se puede capturar ni evitar desde el plugin una vez hecha la llamada.
+- CounterStrikeSharp **no ofrece ninguna forma de comprobar si un modelo es válido** (`PrecacheModel` y `AddResource` son `void` y no informan de nada).
+
+Por eso el plugin usa una lista blanca en vez de aceptar cualquier ruta:
+
+```json
+{
+  "DefaultModel": "",
+  "AllowedModels": []
+}
+```
+
+- Con `DefaultModel` vacío los regalos funcionan pero son invisibles. Es el modo seguro por defecto.
+- Para usar un modelo, ponlo en `DefaultModel` y/o en `AllowedModels`, y **reinicia el mapa** para que se registre en el manifiesto.
+- `css_gift_add <creditos> <modelo>` solo acepta modelos de esa lista. Cualquier otra ruta se rechaza con un mensaje, sin llegar a tocar el motor.
+- Los modelos de agente/jugador (`agents/...`, `characters/...`) se rechazan siempre: llevan esqueleto y animgraph propios y revientan al montarlos sobre un prop, aunque el modelo exista y lo use otro plugin.
+
+Verifica cada modelo nuevo en un servidor de pruebas, nunca en producción.
 
 ### Darte permiso para usar los comandos
 

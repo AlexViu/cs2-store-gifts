@@ -153,20 +153,26 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 
         string? model = command.ArgCount > 2 ? command.GetArg(2) : null;
 
-        // Un modelo escrito a mano ahora no puede registrarse en el manifiesto de este
-        // mapa (ya se construyo al cargarlo), asi que la entidad no se creara todavia.
-        bool modelAvailable = _manager!.IsModelAvailable(model);
-
-        GiftPoint gift = _manager.AddGift(credits, origin, model);
-
-        if (modelAvailable)
+        // Se rechaza aqui, antes de guardar nada: no hay forma de validar un modelo desde
+        // C#, y usar uno invalido mata el proceso del servidor entero. Solo se aceptan los
+        // modelos que el admin haya declarado explicitamente como buenos en la config.
+        if (model != null && !_manager!.IsModelAllowed(model))
         {
-            command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
+            command.ReplyToCommand($"Modelo no autorizado: '{model}'.");
+            command.ReplyToCommand("Anadelo a AllowedModels en CS2StoreGifts.json (solo si sabes que es un prop valido) y reinicia el mapa.");
+            command.ReplyToCommand("Los modelos de agente/jugador (agents/...) no sirven como regalo: crashean el servidor.");
             return;
         }
 
-        command.ReplyToCommand($"Regalo #{gift.Id} guardado con {credits} creditos, pero el modelo no esta registrado en este mapa.");
-        command.ReplyToCommand("Aparecera al cambiar de mapa (si el modelo existe de verdad). No se crea ahora para no crashear el servidor.");
+        GiftPoint gift = _manager!.AddGift(credits, origin, model);
+
+        if (_manager.IsInvisibleMode && model == null)
+        {
+            command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos (invisible: no hay DefaultModel configurado).");
+            return;
+        }
+
+        command.ReplyToCommand($"Regalo #{gift.Id} colocado con {credits} creditos en tu posicion actual.");
     }
 
     [ConsoleCommand("css_gift_remove", "Elimina el regalo mas cercano a tu posicion.")]

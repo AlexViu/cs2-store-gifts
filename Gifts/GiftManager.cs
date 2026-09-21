@@ -84,39 +84,65 @@ public class GiftManager
     }
 
     /// <summary>
-    /// Todos los modelos que este plugin podria llegar a usar: el DefaultModel de la
-    /// config y los modelos propios de los regalos de todos los mapas guardados.
+    /// Modelos que el plugin tiene permitido usar: DefaultModel + AllowedModels de la
+    /// config. Deliberadamente NO se incluyen los modelos que aparezcan en los JSON de
+    /// los mapas: un regalo guardado con un modelo que luego resulta invalido tumbaria
+    /// el servidor en cada carga de mapa, y no hay forma de validarlo desde C#.
     /// </summary>
     private HashSet<string> CollectAllModels()
     {
         HashSet<string> models = new(StringComparer.OrdinalIgnoreCase);
 
-        if (!string.IsNullOrEmpty(_config.DefaultModel))
+        if (IsModelAllowed(_config.DefaultModel))
             models.Add(_config.DefaultModel);
 
-        foreach (string file in Directory.EnumerateFiles(_mapsDirectory, "*.json"))
+        foreach (string model in _config.AllowedModels)
         {
-            foreach (GiftPoint gift in ReadGiftFile(file))
-            {
-                if (!string.IsNullOrEmpty(gift.Model))
-                    models.Add(gift.Model);
-            }
+            if (IsModelAllowed(model))
+                models.Add(model);
         }
 
         return models;
     }
 
     /// <summary>
-    /// Indica si un modelo se pudo registrar en el manifiesto de este mapa, es decir,
-    /// si es seguro asignarlo a una entidad. Un modelo escrito a mano en css_gift_add
-    /// con el mapa ya cargado NO lo estara: se guardara igual, pero no se puede spawnear
-    /// hasta el siguiente cambio de mapa.
+    /// Si el modelo esta autorizado por configuracion. Es una lista blanca porque
+    /// CounterStrikeSharp no expone ninguna forma de comprobar si un modelo existe o es
+    /// valido (PrecacheModel y AddResource son void y no informan de nada), y asignar uno
+    /// invalido mata el proceso del servidor entero.
     /// </summary>
-    public bool IsModelAvailable(string? model)
+    public bool IsModelAllowed(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return false;
+
+        // Los modelos de agente/jugador llevan esqueleto y animgraph propios; montarlos
+        // sobre un prop dispara la asercion de SetupModel aunque el modelo exista.
+        if (model.StartsWith("agents/", StringComparison.OrdinalIgnoreCase) ||
+            model.StartsWith("characters/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return model.Equals(_config.DefaultModel, StringComparison.OrdinalIgnoreCase)
+            || _config.AllowedModels.Contains(model, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Si el modelo esta autorizado Y registrado en el manifiesto de este mapa, es decir,
+    /// si es seguro asignarlo a una entidad ahora mismo.
+    /// </summary>
+    public bool IsModelUsable(string? model)
     {
         string resolved = string.IsNullOrEmpty(model) ? _config.DefaultModel : model;
-        return !string.IsNullOrEmpty(resolved) && _manifestedModels.Contains(resolved);
+        return IsModelAllowed(resolved) && _manifestedModels.Contains(resolved);
     }
+
+    /// <summary>
+    /// true si no hay ningun modelo configurado: los regalos funcionan igual pero sin
+    /// entidad visible. Es el modo que no puede crashear el servidor.
+    /// </summary>
+    public bool IsInvisibleMode => string.IsNullOrWhiteSpace(_config.DefaultModel);
 
     public void OnMapStart()
     {
@@ -267,55 +293,47 @@ public class GiftManager
     {
         string model = string.IsNullOrEmpty(gift.Model) ? _config.DefaultModel : gift.Model;
 
-        if (string.IsNullOrEmpty(model))
-        {
-            _plugin.Logger.LogError("[CS2StoreGifts] El regalo #{Id} no tiene modelo (ni propio ni DefaultModel configurado); se omite.", gift.Id);
+        // Modo invisible: sin modelo configurado no se crea ninguna entidad. El regalo
+        // se sigue pudiendo recoger por proximidad. Es el modo que no puede crashear.
+        if (IsInvisibleMode && string.IsNullOrEmpty(gift.Model))
             return;
-        }
 
-        // Proteccion critica: asignar un modelo que no este en el resource manifest del
-        // mapa mata el proceso del servidor con una asercion nativa que no se puede
-        // atrapar desde C#. Mejor no crear la entidad.
-        if (!_manifestedModels.Contains(model))
+        // Barrera unica y obligatoria: solo se llega a tocar el motor si el modelo esta
+        // en la lista blanca Y se registro en el manifiesto de este mapa. Asignar
+        // cualquier otro modelo mata el proceso del servidor con una asercion nativa
+        // (skeletoninstance.cpp / SetupModel) que no se puede atrapar desde C#, y no hay
+        // ninguna API en CounterStrikeSharp para comprobar antes si un modelo es valido.
+        if (!IsModelUsable(model))
         {
-            _plugin.Logger.LogError(
-                "[CS2StoreGifts] El modelo '{Model}' del regalo #{Id} no esta registrado en el manifiesto de este mapa; no se crea la entidad (spawnearlo crashearia el servidor). Aparecera tras un cambio de mapa si el modelo existe.",
-                model, gift.Id);
+            _plugin.Logger.LogWarning(
+                "[CS2StoreGifts] Regalo #{Id} omitido: el modelo '{Model}' no esta autorizado o no se registro en el manifiesto de este mapa. Anadelo a AllowedModels en la config si sabes que es valido.",
+                gift.Id, model);
             return;
         }
 
         try
         {
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 1: CreateEntityByName (modelo '{Model}')", gift.Id, model);
-
             CDynamicProp? prop = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic_override");
             if (prop == null || !prop.IsValid)
             {
-                _plugin.Logger.LogError("[CS2StoreGifts] Spawn #{Id}: CreateEntityByName devolvio una entidad nula o invalida", gift.Id);
+                _plugin.Logger.LogError("[CS2StoreGifts] Regalo #{Id}: CreateEntityByName devolvio una entidad nula o invalida", gift.Id);
                 return;
             }
 
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 2: Teleport", gift.Id);
             prop.Teleport(new Vector(gift.X, gift.Y, gift.Z), new QAngle(0, 0, 0), new Vector(0, 0, 0));
 
             // DispatchSpawn ANTES de SetModel: una entidad recien creada sigue en la
             // "staging list" del motor hasta que se spawnea, y asignarle el modelo en ese
-            // estado dispara la asercion nativa de skeletoninstance.cpp (SetupModel):
+            // estado dispara la asercion de skeletoninstance.cpp (SetupModel):
             //   0 == (GetEntityIdentity()->GetFlags() & EF_IN_STAGING_LIST)
-            // que mata el proceso del servidor entero.
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 3: DispatchSpawn", gift.Id);
             prop.DispatchSpawn();
-
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 4: SetModel", gift.Id);
             prop.SetModel(model);
 
             // Evita que el prop bloquee el movimiento de los jugadores.
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id} paso 5: colision", gift.Id);
             prop.Collision.SolidType = SolidType_t.SOLID_NONE;
             Utilities.SetStateChanged(prop, "CBaseModelEntity", "m_Collision", 0);
 
             _entities[gift.Id] = prop;
-            _plugin.Logger.LogInformation("[CS2StoreGifts] Spawn #{Id}: OK", gift.Id);
         }
         catch (Exception ex)
         {
