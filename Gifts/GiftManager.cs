@@ -20,7 +20,6 @@ public class GiftManager
 
     private readonly List<GiftPoint> _gifts = [];
     private readonly Dictionary<int, CBaseModelEntity> _entities = [];
-    private readonly HashSet<int> _collected = [];
 
     // Momento a partir del cual cada regalo se puede recoger. Se usa DateTime en vez de
     // tiempo del motor para no depender de ninguna llamada nativa.
@@ -143,7 +142,6 @@ public class GiftManager
     public void OnMapStart()
     {
         _entities.Clear();
-        _collected.Clear();
         _collectableAt.Clear();
         _gifts.Clear();
         _nextId = 1;
@@ -238,7 +236,7 @@ public class GiftManager
             return false;
 
         _gifts.Remove(nearest);
-        _collected.Remove(nearest.Id);
+        _collectableAt.Remove(nearest.Id);
 
         if (_entities.Remove(nearest.Id, out CBaseModelEntity? prop))
             RemoveEntity(prop);
@@ -387,9 +385,11 @@ public class GiftManager
         List<CCSPlayerController> players = Utilities.GetPlayers();
         float radiusSq = _config.PickupRadius * _config.PickupRadius;
 
-        foreach (GiftPoint gift in _gifts)
+        // Se itera sobre una copia: al recoger un regalo se elimina de _gifts, y modificar
+        // la lista mientras se recorre la romperia.
+        foreach (GiftPoint gift in _gifts.ToList())
         {
-            if (_collected.Contains(gift.Id) || !IsCollectable(gift))
+            if (!IsCollectable(gift))
                 continue;
 
             foreach (CCSPlayerController player in players)
@@ -420,18 +420,23 @@ public class GiftManager
 
     private void Collect(GiftPoint gift, CCSPlayerController player)
     {
-        // Se marca como recogido lo primero: si algo falla mas abajo, el regalo no se
-        // vuelve a intentar en el siguiente tick del timer, en bucle.
-        _collected.Add(gift.Id);
-
+        // Si el jugador ya no es valido no se recoge nada: el regalo sigue en la lista y
+        // se reintentara en el siguiente tick del timer.
         if (!player.IsValid)
             return;
 
         string playerName = player.PlayerName;
 
+        // El regalo se borra definitivamente, tambien del JSON del mapa: una vez recogido
+        // no vuelve a aparecer aunque el mapa se reinicie o cambie. Se hace lo primero
+        // para que un fallo posterior no lo deje recogiendose en bucle cada tick.
+        _gifts.Remove(gift);
+        _collectableAt.Remove(gift.Id);
+        Save();
+
         _plugin.Logger.LogInformation(
-            "[CS2StoreGifts] Collect #{Id}: {Player} recoge {Credits} creditos.",
-            gift.Id, playerName, gift.Credits);
+            "[CS2StoreGifts] Collect #{Id}: {Player} recoge {Credits} creditos. Quedan {Left} regalo(s) en el mapa.",
+            gift.Id, playerName, gift.Credits, _gifts.Count);
 
         // Logs por paso: el crash ocurre en algun punto de esta secuencia y la linea
         // anterior si llega al archivo, asi que la ultima que aparezca acota la llamada.

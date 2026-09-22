@@ -15,7 +15,7 @@ namespace CS2StoreGifts;
 public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 {
     public override string ModuleName => "CS2StoreGifts";
-    public override string ModuleVersion => "1.5.0";
+    public override string ModuleVersion => "1.6.0";
     public override string ModuleAuthor => "Lonza";
     public override string ModuleDescription => "Regalos de creditos para cs2-store colocables en el mapa.";
 

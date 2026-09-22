@@ -91,7 +91,7 @@ Guarda el archivo y vuelve a conectarte al servidor (o usa `css_admin_reload` si
 - Al iniciar cada mapa, el plugin lee un archivo JSON propio de ese mapa (`configs/plugins/CS2StoreGifts/maps/<nombre_del_mapa>.json`) y crea una entidad visual en cada posición guardada, sin colisión con los jugadores.
 - Cada cierto tiempo revisa la distancia entre cada jugador vivo y cada regalo no recogido. Si un jugador entra en el radio configurado, recibe los créditos a través de `IStoreApi.GivePlayerCredits()`, se anuncia en el chat (si está activado) y el regalo desaparece.
 - No hay sonido de recogida a propósito: la implementación anterior (`ExecuteClientCommandFromServer("play <ruta>")`) tumbaba el servidor. La API correcta es `CBaseEntity.EmitSound`, que espera un nombre de *soundevent* y no una ruta de archivo.
-- Cada regalo se puede recoger **una sola vez por mapa**: vuelve a estar disponible cuando el mapa se reinicia o cambia.
+- Al recogerlo, el regalo **se borra del JSON del mapa de forma permanente**: no vuelve a aparecer aunque el mapa se reinicie o cambie. Para reponerlos hay que colocarlos de nuevo con `css_gift_add`.
 - Los regalos se crean y gestionan en vivo, dentro del juego, con comandos de administrador (requieren el permiso `@css/root`):
 
   | Comando | Qué hace |
