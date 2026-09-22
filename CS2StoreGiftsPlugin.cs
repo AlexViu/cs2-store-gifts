@@ -15,7 +15,7 @@ namespace CS2StoreGifts;
 public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
 {
     public override string ModuleName => "CS2StoreGifts";
-    public override string ModuleVersion => "1.6.0";
+    public override string ModuleVersion => "1.7.0";
     public override string ModuleAuthor => "Lonza";
     public override string ModuleDescription => "Regalos de creditos para cs2-store colocables en el mapa.";
 
@@ -92,10 +92,11 @@ public class CS2StoreGiftsPlugin : BasePlugin, IPluginConfig<GiftsConfig>
             // Se vuelca la config efectiva para poder verificar de un vistazo que build
             // y que valores esta usando realmente el servidor.
             Logger.LogInformation(
-                "[CS2StoreGifts] v{Version} conectado a cs2-store. DefaultModel='{Model}' ({Mode}), AllowedModels={Allowed}, PickupRadius={Radius}, PlaceDistance={Place}, PickupDelay={Delay}s.",
+                "[CS2StoreGifts] v{Version} conectado a cs2-store. DefaultModel='{Model}' ({Mode}), Escala={Scale}, AllowedModels={Allowed}, PickupRadius={Radius}, PlaceDistance={Place}, PickupDelay={Delay}s.",
                 ModuleVersion,
                 Config.DefaultModel,
                 string.IsNullOrWhiteSpace(Config.DefaultModel) ? "modo invisible, no se crean entidades" : "con entidad visible",
+                Config.ModelScale,
                 Config.AllowedModels.Count,
                 Config.PickupRadius,
                 Config.PlaceDistance,

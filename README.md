@@ -45,6 +45,7 @@ Por eso el plugin usa una lista blanca en vez de aceptar cualquier ruta:
 ```
 
 - Con `DefaultModel` vacío los regalos funcionan pero son invisibles. Es el modo seguro por defecto.
+- `ModelScale` ajusta el tamaño del prop (`1.0` = original, `0.5` = la mitad). Muchos props del juego son demasiado grandes para un regalo en el suelo.
 - Para usar un modelo, ponlo en `DefaultModel` y/o en `AllowedModels`, y **reinicia el mapa** para que se registre en el manifiesto.
 - `css_gift_add <creditos> <modelo>` solo acepta modelos de esa lista. Cualquier otra ruta se rechaza con un mensaje, sin llegar a tocar el motor.
 

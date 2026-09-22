@@ -337,8 +337,11 @@ public class GiftManager
             // que mata el proceso del servidor entero. Hacerlo un frame despues es seguro.
             Server.NextFrame(() =>
             {
-                if (prop.IsValid)
-                    prop.SetModel(model);
+                if (!prop.IsValid)
+                    return;
+
+                prop.SetModel(model);
+                ApplyScale(prop, gift.Id);
             });
 
             _entities[gift.Id] = prop;
@@ -463,6 +466,36 @@ public class GiftManager
         }
 
         _plugin.Logger.LogInformation("[CS2StoreGifts] Collect #{Id}: completado.", gift.Id);
+    }
+
+    /// <summary>
+    /// Ajusta el tamano del modelo. Se aplica despues de SetModel, ya con la entidad
+    /// spawneada y el modelo asignado, porque la escala vive en el nodo de escena del
+    /// cuerpo y ese no existe hasta que hay modelo.
+    /// </summary>
+    private void ApplyScale(CBaseModelEntity prop, int giftId)
+    {
+        float scale = _config.ModelScale;
+
+        if (scale <= 0f || Math.Abs(scale - 1.0f) < 0.001f)
+            return;
+
+        try
+        {
+            if (prop.CBodyComponent?.SceneNode is not { } sceneNode)
+            {
+                _plugin.Logger.LogWarning("[CS2StoreGifts] Regalo #{Id}: sin nodo de escena, no se puede escalar.", giftId);
+                return;
+            }
+
+            sceneNode.Scale = scale;
+            sceneNode.AbsScale = scale;
+            Utilities.SetStateChanged(prop, "CBaseEntity", "m_CBodyComponent", 0);
+        }
+        catch (Exception ex)
+        {
+            _plugin.Logger.LogError(ex, "[CS2StoreGifts] Error escalando el regalo #{Id} a {Scale}", giftId, scale);
+        }
     }
 
     /// <summary>

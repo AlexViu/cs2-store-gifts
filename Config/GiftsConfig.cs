@@ -25,6 +25,10 @@ public class GiftsConfig : BasePluginConfig
     // Distancia (unidades de Source) para considerar que un jugador "toco" el regalo.
     public float PickupRadius { get; set; } = 60.0f;
 
+    // Escala del modelo del regalo. 1.0 = tamano original, 0.5 = la mitad.
+    // Util porque muchos props del juego son demasiado grandes para un regalo en el suelo.
+    public float ModelScale { get; set; } = 1.0f;
+
     // A que distancia por delante del admin se coloca el regalo con css_gift_add.
     // Si se creara justo bajo sus pies, el propio admin lo recogeria al instante.
     public float PlaceDistance { get; set; } = 100.0f;
